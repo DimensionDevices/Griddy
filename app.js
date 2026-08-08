@@ -1194,9 +1194,12 @@
   // ---------- events ----------
   function initEvents() {
     handles.forEach(hEl => {
-      hEl.addEventListener("mousedown", (e) => {
+      hEl.addEventListener("pointerdown", (e) => {
         if (tool !== "select" || selectedShapeIdx === null) return;
         e.stopPropagation(); e.preventDefault();
+        if (hEl.setPointerCapture && e.pointerId != null) {
+          try { hEl.setPointerCapture(e.pointerId); } catch(err) {}
+        }
         const { x, y } = cellFromEvent(e);
         activeHandle = hEl.dataset.handle;
         const origShape = shapes[selectedShapeIdx];
@@ -1218,7 +1221,9 @@
       });
     });
 
-    hitLayer.addEventListener("mousedown", (e) => {
+    hitLayer.addEventListener("pointerdown", (e) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      e.preventDefault();
       const { x, y } = cellFromEvent(e);
       if (tool === "text") { openTextInput(x,y); return; }
       if (tool === "fill") {
@@ -1268,10 +1273,11 @@
       dragStart = { x, y };
     });
 
-    window.addEventListener("mousemove", (e) => {
+    window.addEventListener("pointermove", (e) => {
       const { x, y } = cellFromEvent(e);
       hoverCell = { x, y };
       if (!dragStart) return;
+      if (e.cancelable) e.preventDefault();
 
       if (tool === "freehand") {
         freehandPaint(x,y);
@@ -1335,7 +1341,7 @@
       render();
     });
 
-    window.addEventListener("mouseup", (e) => {
+    window.addEventListener("pointerup", (e) => {
       if (!dragStart) return;
       const { x, y } = cellFromEvent(e);
 
@@ -1366,13 +1372,21 @@
       render();
     });
 
+    window.addEventListener("pointercancel", () => {
+      dragStart = null;
+      previewShapes = null;
+      activeHandle = null;
+      resizeOrigin = null;
+      render();
+    });
+
     textInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") commitTextInput();
       else if (e.key === "Escape") { textInput.style.display = "none"; textState = null; }
       e.stopPropagation();
     });
     textInput.addEventListener("blur", commitTextInput);
-    textInput.addEventListener("mousedown", (e) => e.stopPropagation());
+    textInput.addEventListener("pointerdown", (e) => e.stopPropagation());
 
     document.querySelectorAll("#toolbar button[data-tool]").forEach(btn => {
       btn.addEventListener("click", () => {

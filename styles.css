@@ -19,8 +19,18 @@
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       overflow: hidden;
+      overscroll-behavior: none;
+      -webkit-text-size-adjust: 100%;
     }
-    body { display: flex; flex-direction: column; }
+    body {
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      padding-top: env(safe-area-inset-top);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
     #toolbar {
       display: flex;
       gap: 6px;
@@ -31,6 +41,7 @@
       background: var(--panel);
       z-index: 10;
       flex-shrink: 0;
+      -webkit-overflow-scrolling: touch;
     }
     button, select, input[type="color"], input[type="file"] {
       padding: 5px 10px;
@@ -61,6 +72,8 @@
       overflow: auto;
       background: var(--bg);
       min-height: 0;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
     }
     #canvas-inner { position: relative; }
     #grid-svg-bg { position: absolute; top: 0; left: 0; pointer-events: none; opacity: 0.07; }
@@ -86,7 +99,7 @@
       line-height: 18px;
       color: #ffffff;
     }
-    #hit-layer { position: absolute; top: 0; left: 0; cursor: crosshair; }
+    #hit-layer { position: absolute; top: 0; left: 0; cursor: crosshair; touch-action: none; }
     #hit-layer.text-tool { cursor: text; }
     #hit-layer.select-tool { cursor: default; }
     #hit-layer.freehand-tool { cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><circle cx="4" cy="4" r="3" fill="white" stroke="black"/></svg>') 4 4, crosshair; }
@@ -110,6 +123,16 @@
       border-radius: 2px;
       pointer-events: auto;
       display: none;
+      touch-action: none;
+    }
+    /* enlarge the tappable area without changing the visible handle size */
+    .handle::before {
+      content: "";
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 28px;
+      height: 28px;
     }
     .handle.nw, .handle.se { cursor: nwse-resize; }
     .handle.ne, .handle.sw { cursor: nesw-resize; }
@@ -525,3 +548,79 @@
       line-height: 1.3;
       color: var(--text-muted);
     }
+/* --- mobile / touch responsiveness --- */
+
+/* Generous tap targets on touch devices, larger color swatch, coarse-pointer tuning */
+@media (pointer: coarse) {
+  button, select, input[type="color"], input[type="file"] {
+    padding: 8px 12px;
+    font-size: 13px;
+    min-height: 36px;
+  }
+  input[type="color"] { width: 36px; height: 36px; }
+  .handle { width: 14px; height: 14px; margin-left: -7px; margin-top: -7px; }
+  #help-modal-body, #image-modal, #figlet-modal { -webkit-overflow-scrolling: touch; }
+}
+
+@media (max-width: 720px) {
+  #toolbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 6px;
+    padding: 8px;
+  }
+  #toolbar button,
+  #toolbar select,
+  #toolbar .color-group,
+  #toolbar label.inline {
+    flex-shrink: 0;
+  }
+  #toolbar .spacer { flex: 0 0 8px; min-width: 8px; }
+  #status {
+    display: none; /* reclaim space on narrow toolbars; still available via footer/help */
+  }
+
+  #app-footer {
+    flex-wrap: wrap;
+    row-gap: 4px;
+    padding: 6px 10px;
+    font-size: 10.5px;
+  }
+  #app-footer .footer-spacer { display: none; }
+  #app-footer .footer-links { gap: 10px; }
+
+  #help-modal,
+  #figlet-modal,
+  #image-modal {
+    width: 100%;
+    max-width: 100vw;
+    max-height: 92dvh;
+    border-radius: 12px 12px 0 0;
+    margin: 0;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+  #help-modal-overlay,
+  #figlet-modal-overlay,
+  #image-modal-overlay {
+    align-items: flex-end;
+  }
+
+  #image-modal .preview-row { flex-direction: column; align-items: stretch; }
+  #image-modal .preview-row canvas { max-width: 100%; width: 100%; height: auto; }
+  #image-modal .slider-group input[type="range"] { flex: 1; width: auto; }
+
+  #font-preview-grid { max-height: 44dvh; }
+  #figlet-preview { max-height: 22dvh; }
+  #image-ascii-preview { max-height: 30dvh; }
+
+  #text-input { font-size: 16px; } /* prevents iOS auto-zoom on focus */
+}
+
+@media (max-width: 480px) {
+  #app-footer .footer-title { display: none; }
+  #app-footer .footer-sep { display: none; }
+}
