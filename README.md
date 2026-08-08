@@ -82,4 +82,4 @@ Everything - markup, styles, and logic - lives in a single `index.html` file usi
 
 ## License
 
-Add your license of choice here.
+This code is copyrighted by DimensionDevices. Use and share without any code adjustments.
