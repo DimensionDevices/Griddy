@@ -1,6 +1,6 @@
-# Griddy v1.0
+# Griddy v1.1 - An open-source ASCII creation tool.
 
-[Try Griddy here](https://dimensiondevices.github.io/Griddy/)!
+[Try Griddy here](https://dimensiondevices.github.io/Griddy/)
 
 ## What is Griddy?
 
