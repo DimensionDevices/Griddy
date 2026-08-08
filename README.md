@@ -4,7 +4,7 @@
 
 ## What is Griddy?
 
-A single-file, browser-based ASCII diagram and art editor. Draw shapes, drop in FIGlet text banners, paint with color, import images as ASCII art, and export the result as plain text, colored HTML, or plain ASCII.
+A browser-based ASCII diagram and art editor. Draw shapes, drop in FIGlet text banners, paint with color, import images as ASCII art, and export the result as plain text, colored HTML, or plain ASCII.
 
 No build step, no dependencies to install. Open `index.html` in a browser and start drawing.
 
