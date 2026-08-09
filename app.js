@@ -55,6 +55,8 @@ const footerShortcutsLink = document.getElementById("footer-shortcuts-link");
 const fillSelect = document.getElementById("fillchar-select");
 const elbowToggleWrap = document.getElementById("elbow-toggle-wrap");
 const elbowToggle = document.getElementById("elbow-toggle");
+const polygonFillToggleWrap = document.getElementById("polygon-fill-toggle-wrap");
+const polygonFillToggle = document.getElementById("polygon-fill-toggle");
 const statusEl = document.getElementById("status");
 const handles = Array.from(document.querySelectorAll(".handle"));
 const drawColorInput = document.getElementById("draw-color");
@@ -131,6 +133,10 @@ let selectedFontName = null;
 let selectedFontCategory = "All";
 let COLS = 60, ROWS = 35;
 let fixedCanvasSize = false; // true once user picks a custom size, disables auto-resize-to-window
+
+// Polygon-in-progress state: click to add each vertex, click near the start
+// point (or press Enter) to close the shape, Escape cancels.
+let polygonPoints = null;
 
 // Image import state
 let importedImageData = null;
@@ -317,6 +323,7 @@ function stampShape(g, s) {
   else if (s.type === "arrow") stampLine(g, s.x0, s.y0, s.x1, s.y1, true, s.elbow);
   else if (s.type === "text") stampText(g, s.x0, s.y0, s.value);
   else if (s.type === "figlet") stampFiglet(g, s);
+  else if (s.type === "polygon") stampPolygon(g, s.points, s.filled, s.fillChar, s.style);
   else if (s.type === "freeform") s.cells.forEach(([x, y, ch]) => setCh(g, x, y, ch));
 }
 
@@ -396,6 +403,132 @@ function stampLine(g, x0, y0, x1, y1, arrow, elbow) {
   }
 }
 
+// Draws one straight segment between two grid points using box-drawing
+// characters for axis-aligned runs and slashes for diagonals.
+function stampSegment(g, x0, y0, x1, y1) {
+  const dx = x1 - x0, dy = y1 - y0;
+  const steps = Math.max(Math.abs(dx), Math.abs(dy));
+  if (steps === 0) { setCh(g, x0, y0, "+"); return; }
+  for (let i = 0; i <= steps; i++) {
+    const x = Math.round(x0 + (dx * i) / steps);
+    const y = Math.round(y0 + (dy * i) / steps);
+    let ch;
+    if (dx === 0) ch = "│";
+    else if (dy === 0) ch = "─";
+    else ch = (Math.sign(dx) === Math.sign(dy)) ? "\\" : "/";
+    setCh(g, x, y, ch);
+  }
+}
+
+function getOutlineChars(style) {
+  switch(style) {
+    case 'thin':
+    default:
+      return { h: '─', v: '│', diag1: '\\', diag2: '/', dot: '•' };
+    case 'thick':
+      return { h: '━', v: '┃', diag1: '\\', diag2: '/', dot: '◆' };
+    case 'double':
+      return { h: '═', v: '║', diag1: '╲', diag2: '╱', dot: '◆' };
+    case 'dashed':
+      return { h: '-', v: '|', diag1: '\\', diag2: '/', dot: '∘' };
+    case 'dotted':
+      return { h: '·', v: '·', diag1: '·', diag2: '·', dot: '·' };
+    case 'rounded':
+      return { h: '─', v: '│', diag1: '\\', diag2: '/', dot: '•', rounded: true };
+    case 'ascii':
+      return { h: '-', v: '|', diag1: '\\', diag2: '/', dot: '+' };
+    case 'blocks':
+      return { h: '█', v: '█', diag1: '▓', diag2: '▓', dot: '█' };
+    case 'symbols':
+      return { h: '♦', v: '♠', diag1: '♣', diag2: '♥', dot: '★' };
+  }
+}
+
+function stampSegmentWithStyle(g, x0, y0, x1, y1, chars) {
+  const dx = x1 - x0, dy = y1 - y0;
+  const steps = Math.max(Math.abs(dx), Math.abs(dy));
+  if (steps === 0) { setCh(g, x0, y0, chars.dot || '+'); return; }
+  
+  // Check if this is a single pixel (just set a dot)
+  if (steps === 1 && Math.abs(dx) === 1 && Math.abs(dy) === 1) {
+    setCh(g, x0, y0, chars.dot || '•');
+    setCh(g, x1, y1, chars.dot || '•');
+    return;
+  }
+  
+  for (let i = 0; i <= steps; i++) {
+    const x = Math.round(x0 + (dx * i) / steps);
+    const y = Math.round(y0 + (dy * i) / steps);
+    let ch;
+    
+    // Only draw corners if we're not at the very ends or if it's a rounded style
+    const isCorner = (i === 0 || i === steps);
+    
+    if (dx === 0) {
+      ch = chars.v || '│';
+    } else if (dy === 0) {
+      ch = chars.h || '─';
+    } else {
+      // Diagonal - choose based on slope sign
+      const slope = dy / dx;
+      // Use a threshold to decide between diagonal and orthogonal chars
+      if (Math.abs(slope) < 0.3) {
+        ch = chars.h || '─';
+      } else if (Math.abs(slope) > 3) {
+        ch = chars.v || '│';
+      } else {
+        ch = (Math.sign(dx) === Math.sign(dy)) ? (chars.diag1 || '\\') : (chars.diag2 || '/');
+      }
+    }
+    
+    // For rounded corners, use dot at vertices
+    if (chars.rounded && isCorner && i > 0 && i < steps) {
+      ch = chars.dot || '•';
+    }
+    
+    setCh(g, x, y, ch);
+  }
+}
+
+function stampPolygon(g, points, filled, fillChar, style) {
+  if (!points || points.length < 2) return;
+  
+  const outlineChars = getOutlineChars(style || 'thin');
+  
+  if (filled && points.length >= 3) {
+    let minY = Infinity, maxY = -Infinity;
+    points.forEach(([, py]) => { minY = Math.min(minY, py); maxY = Math.max(maxY, py); });
+    const ch = fillChar || "#";
+    for (let y = minY; y <= maxY; y++) {
+      const xs = [];
+      for (let i = 0; i < points.length; i++) {
+        const [x0, y0] = points[i];
+        const [x1, y1] = points[(i + 1) % points.length];
+        if (y0 === y1) continue;
+        if ((y >= y0 && y < y1) || (y >= y1 && y < y0)) {
+          const t = (y - y0) / (y1 - y0);
+          xs.push(x0 + t * (x1 - x0));
+        }
+      }
+      xs.sort((a, b) => a - b);
+      for (let i = 0; i + 1 < xs.length; i += 2) {
+        const xStart = Math.ceil(xs[i] - 0.5);
+        const xEnd = Math.floor(xs[i + 1] - 0.5);
+        for (let x = xStart; x <= xEnd; x++) setCh(g, x, y, ch);
+      }
+    }
+  }
+  
+  // Draw outline using the selected style
+  for (let i = 0; i < points.length; i++) {
+    const isLast = i === points.length - 1;
+    if (isLast && points.length < 3) break;
+    const [x0, y0] = points[i];
+    const [x1, y1] = points[(i + 1) % points.length];
+    stampSegmentWithStyle(g, x0, y0, x1, y1, outlineChars);
+  }
+}
+
 function floodFill(baseGrid, x, y, fillChar) {
   const g = baseGrid.map(row => row.slice());
   const target = g[y][x];
@@ -426,6 +559,10 @@ function shapeBounds(s) {
   }
   if (s.type === "freeform") {
     const xs = s.cells.map(c => c[0]), ys = s.cells.map(c => c[1]);
+    return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+  }
+  if (s.type === "polygon") {
+    const xs = s.points.map(p => p[0]), ys = s.points.map(p => p[1]);
     return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
   }
   return { minX: Math.min(s.x0,s.x1), maxX: Math.max(s.x0,s.x1), minY: Math.min(s.y0,s.y1), maxY: Math.max(s.y0,s.y1) };
@@ -541,9 +678,14 @@ function render() {
   pasteBtn.style.display = clipboard ? "inline-block" : "none";
 
   renderSelectionUI(shape);
-  fillSelect.style.display = tool === "fill" ? "inline-block" : "none";
+  fillSelect.style.display = (tool === "fill" || tool === "polygon") ? "inline-block" : "none";
   elbowToggleWrap.style.display = (tool === "line" || tool === "arrow") ? "flex" : "none";
-  statusEl.textContent = COLS + " x " + ROWS + " cells" + (shape ? "  ·  " + shape.type + " selected" : "");
+  polygonFillToggleWrap.style.display = tool === "polygon" ? "flex" : "none";
+  // Show/hide polygon style dropdown
+  document.getElementById('polygon-style-wrap').style.display = tool === "polygon" ? "flex" : "none";
+  
+  let statusText = COLS + " x " + ROWS + " cells" + (shape ? "  ·  " + shape.type + " selected" : "");
+  statusEl.textContent = statusText;
 }
 
 function renderSelectionUI(shape) {
@@ -570,7 +712,7 @@ function renderSelectionUI(shape) {
   };
   handles.forEach(hEl => {
     const key = hEl.dataset.handle;
-    if (shape.type === "text" || shape.type === "freeform" || shape.type === "figlet") {
+    if (shape.type === "text" || shape.type === "freeform" || shape.type === "figlet" || shape.type === "polygon") {
       hEl.style.display = (key === "move") ? "block" : "none";
     } else if (isLinelike) {
       hEl.style.display = (key === "nw" || key === "se" || key === "move") ? "block" : "none";
@@ -605,6 +747,46 @@ function commitShapes(newShapes) {
   invalidateCache();
   render();
   scheduleAutosave();
+}
+
+// ---------- polygon tool ----------
+// Click adds a vertex. Clicking on/near the first vertex again (once there are
+// at least 3 points) closes and commits the polygon. Enter also closes it.
+// Escape, switching tools, or clicking the polygon button again cancels it.
+function handlePolygonClick(x, y) {
+  if (!polygonPoints) polygonPoints = [];
+  if (polygonPoints.length >= 3) {
+    const [fx, fy] = polygonPoints[0];
+    if (x === fx && y === fy) { finishPolygon(); return; }
+  }
+  polygonPoints.push([x, y]);
+  updatePolygonPreview();
+}
+
+function updatePolygonPreview(cursor) {
+  if (!polygonPoints) { previewShapes = null; render(); return; }
+  const pts = cursor ? [...polygonPoints, cursor] : polygonPoints;
+  const style = document.getElementById('polygon-style-select').value;
+  previewShapes = [...shapes, { type: "polygon", points: pts, filled: polygonFillToggle.checked, fillChar: currentPolygonFillChar(), style: style }];
+  invalidateCache();
+  render();
+}
+
+function currentPolygonFillChar() { return fillChar || "#"; }
+
+function finishPolygon() {
+  if (!polygonPoints || polygonPoints.length < 3) { cancelPolygon(); return; }
+  const filled = polygonFillToggle.checked;
+  const style = document.getElementById('polygon-style-select').value;
+  const poly = { type: "polygon", points: polygonPoints, filled, fillChar: currentPolygonFillChar(), style: style };
+  polygonPoints = null;
+  commitShapes([...shapes, poly]);
+}
+
+function cancelPolygon() {
+  polygonPoints = null;
+  previewShapes = null;
+  render();
 }
 
 function undo() {
@@ -1523,12 +1705,30 @@ function initEvents() {
       return;
     }
     if (tool === "figlet") { openFigletModal(); return; }
+    if (tool === "polygon") {
+      handlePolygonClick(x, y);
+      return;
+    }
     dragStart = { x, y };
+  });
+
+  hitLayer.addEventListener("dblclick", (e) => {
+    if (tool === "polygon" && polygonPoints && polygonPoints.length >= 3) {
+      e.preventDefault();
+      // The second click of the dblclick already added a (near-duplicate) vertex;
+      // drop it so we close using the point before it.
+      polygonPoints.pop();
+      finishPolygon();
+    }
   });
 
   window.addEventListener("pointermove", (e) => {
     const { x, y } = cellFromEvent(e);
     hoverCell = { x, y };
+    if (tool === "polygon" && polygonPoints) {
+      updatePolygonPreview([x, y]);
+      return;
+    }
     if (!dragStart) return;
     if (e.cancelable) e.preventDefault();
 
@@ -1553,6 +1753,8 @@ function initEvents() {
         if (activeHandle === "move") { s.x0 = orig.x0 + dx; s.y0 = orig.y0 + dy; }
       } else if (s.type === "freeform") {
         if (activeHandle === "move") { s.cells = orig.cells.map(([cx, cy, ch]) => [cx + dx, cy + dy, ch]); }
+      } else if (s.type === "polygon") {
+        if (activeHandle === "move") { s.points = orig.points.map(([px, py]) => [px + dx, py + dy]); }
       } else {
         let { x0: ox0, y0: oy0, x1: ox1, y1: oy1 } = orig;
         let minX = Math.min(ox0,ox1), maxX = Math.max(ox0,ox1), minY = Math.min(oy0,oy1), maxY = Math.max(oy0,oy1);
@@ -1643,14 +1845,22 @@ function initEvents() {
 
   document.querySelectorAll("#toolbar button[data-tool]").forEach(btn => {
     btn.addEventListener("click", () => {
+      if (tool === "polygon" && polygonPoints && btn.dataset.tool !== "polygon") cancelPolygon();
       tool = btn.dataset.tool;
       if (tool !== "select") selectedShapeIdx = null;
       render();
     });
   });
 
-  fillSelect.addEventListener("change", (e) => { fillChar = e.target.value; });
+  fillSelect.addEventListener("change", (e) => { fillChar = e.target.value; if (tool === "polygon" && polygonPoints) updatePolygonPreview(hoverCell ? [hoverCell.x, hoverCell.y] : undefined); });
   elbowToggle.addEventListener("change", render);
+  polygonFillToggle.addEventListener("change", () => {
+    if (tool === "polygon" && polygonPoints) {
+      previewShapes = [...shapes, { type: "polygon", points: hoverCell ? [...polygonPoints, [hoverCell.x, hoverCell.y]] : polygonPoints, filled: polygonFillToggle.checked, fillChar: currentPolygonFillChar() }];
+      invalidateCache();
+      render();
+    }
+  });
 
   window.addEventListener("keydown", (e) => {
     if (e.key === "Alt") altHeld = true;
@@ -1668,10 +1878,17 @@ function initEvents() {
       if (helpModalOverlay.style.display === "flex") { closeHelpModal(); return; }
       if (modalOverlay.style.display === "flex") { closeFigletModal(); return; }
       if (imageModalOverlay.style.display === "flex") { closeImageModal(); return; }
+      if (tool === "polygon" && polygonPoints) { cancelPolygon(); return; }
       if (tool === "select" && selectedShapeIdx !== null) {
         selectedShapeIdx = null;
         render();
       }
+      return;
+    }
+
+    if (tool === "polygon" && polygonPoints && e.key === "Enter") {
+      e.preventDefault();
+      finishPolygon();
       return;
     }
 
@@ -1713,12 +1930,13 @@ function initEvents() {
     // Single-letter tool shortcuts (no modifier held)
     if (!e.metaKey && !e.ctrlKey && !e.altKey) {
       const toolKeyMap = {
-        v: "select", b: "box", l: "line", a: "arrow", c: "circle",
+        v: "select", b: "box", l: "line", a: "arrow", c: "circle", y: "polygon",
         t: "text", g: "figlet", f: "fill", h: "freehand", p: "paint", e: "erase"
       };
       const mapped = toolKeyMap[e.key.toLowerCase()];
       if (mapped) {
         e.preventDefault();
+        if (tool === "polygon" && polygonPoints && mapped !== "polygon") cancelPolygon();
         tool = mapped;
         if (tool !== "select") selectedShapeIdx = null;
         if (tool === "figlet") { openFigletModal(); tool = "select"; }
@@ -1747,6 +1965,10 @@ function initEvents() {
   copySelBtn.addEventListener("click", () => {
     if (selectedShapeIdx === null) return;
     clipboard = JSON.parse(JSON.stringify(shapes[selectedShapeIdx]));
+    // Ensure polygon style is preserved
+    if (clipboard.type === "polygon" && !clipboard.style) {
+      clipboard.style = "thin";
+    }
     render();
   });
   deleteSelBtn.addEventListener("click", () => {

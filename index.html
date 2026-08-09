@@ -6,7 +6,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>GRIDDY v1.3</title>
+  <title>GRIDDY v1.4</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -18,6 +18,7 @@
   <button data-tool="line">Line</button>
   <button data-tool="arrow">Arrow</button>
   <button data-tool="circle">Circle</button>
+  <button data-tool="polygon">Polygon</button>
   <button data-tool="text">Text</button>
   <button data-tool="figlet">Figlet</button>
   <button data-tool="fill">Fill</button>
@@ -32,6 +33,24 @@
     Right-angle
   </label>
 
+  <label class="inline hidden" id="polygon-fill-toggle-wrap">
+    <input type="checkbox" id="polygon-fill-toggle">
+    Filled
+  </label>
+
+  <label class="inline hidden" id="polygon-style-wrap">
+    <select id="polygon-style-select">
+      <option value="thin">Thin (─ │ ┐)</option>
+      <option value="thick">Thick (━ ┃ ┓)</option>
+      <option value="double">Double (═ ║ ╗)</option>
+      <option value="dashed">Dashed (- | /)</option>
+      <option value="dotted">Dotted (· · ·)</option>
+      <option value="ascii">ASCII (+ - |)</option>
+      <option value="blocks">Blocks (█ ▓ ▒)</option>
+      <option value="symbols">Symbols (♦ ♠ ♣ ♥)</option>
+    </select>
+  </label>
+
   <select id="fillchar-select" class="hidden">
     <option value="#">#</option>
     <option value="*">*</option>
@@ -39,6 +58,7 @@
     <option value="%">%</option>
     <option value="o">o</option>
     <option value="=">=</option>
+    <option value=" "> </option>
   </select>
 
   <div class="color-group">
@@ -83,7 +103,7 @@
 </div>
 
 <footer id="app-footer">
-  <span class="footer-title">Griddy v1.3</span>
+  <span class="footer-title">Griddy v1.4</span>
   <span class="footer-sep">·</span>
   <span>&copy; <span id="footer-year"></span> Dimension Devices. All rights reserved.</span>
   <div class="footer-spacer"></div>
@@ -109,6 +129,7 @@
         <div class="shortcut-row"><span class="desc">Line</span><span class="kbd"><kbd>L</kbd></span></div>
         <div class="shortcut-row"><span class="desc">Arrow</span><span class="kbd"><kbd>A</kbd></span></div>
         <div class="shortcut-row"><span class="desc">Circle</span><span class="kbd"><kbd>C</kbd></span></div>
+        <div class="shortcut-row"><span class="desc">Polygon</span><span class="kbd"><kbd>Y</kbd></span></div>
         <div class="shortcut-row"><span class="desc">Text</span><span class="kbd"><kbd>T</kbd></span></div>
         <div class="shortcut-row"><span class="desc">Figlet</span><span class="kbd"><kbd>G</kbd></span></div>
         <div class="shortcut-row"><span class="desc">Fill</span><span class="kbd"><kbd>F</kbd></span></div>
@@ -123,6 +144,8 @@
         <div class="shortcut-row"><span class="desc">Paste at cursor</span><span class="kbd"><kbd>Ctrl/⌘</kbd><kbd>V</kbd></span></div>
         <div class="shortcut-row"><span class="desc">Delete selected shape</span><span class="kbd"><kbd>Delete</kbd></span></div>
         <div class="shortcut-row"><span class="desc">Deselect / close dialogs</span><span class="kbd"><kbd>Esc</kbd></span></div>
+        <div class="shortcut-row"><span class="desc">Finish polygon</span><span class="kbd"><kbd>Enter</kbd></span></div>
+        <div class="shortcut-row"><span class="desc">Cancel polygon in progress</span><span class="kbd"><kbd>Esc</kbd></span></div>
         <h4>File</h4>
         <div class="shortcut-row"><span class="desc">Save</span><span class="kbd"><kbd>Ctrl/⌘</kbd><kbd>S</kbd></span></div>
       </div>
