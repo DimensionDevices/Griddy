@@ -11,7 +11,7 @@ No build step, no dependencies to install. Open `index.html` in a browser and st
 ## Features
 
 - **Drawing tools** - Select, Box, Line, Arrow, Circle, Text, Freehand, Fill, Paint, Erase
-- **Polygon drawing** - Full polygon drawing, with outline and fill options, works with coloration
+- **Polygon drawing** - Full polygon drawing, with outline and fill options
 - **FIGlet text banners** - insert large ASCII-art text using `.flf` fonts, with an optional start/middle/end color gradient (horizontal or vertical)
 - **Internet FIGlet font collection** - FIGlet fonts are collected automatically from this GitHub repository, however you may adjust the code to load them locally from the fonts/ folder.
 - **Color layer** - paint colors onto any shape or character; colors move together with their shape when you reposition it
