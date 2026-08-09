@@ -5,6 +5,9 @@ const fontBase = "https://raw.githubusercontent.com/DimensionDevices/Griddy/refs
 const CELL_H = 18;
 let CELL_W = 9.6;
 
+// ---------- paint brush ----------
+let brushSize = 5;
+
 // ---------- measure ----------
 function measureCell() {
   const probe = document.createElement("span");
@@ -60,6 +63,7 @@ const polygonFillToggle = document.getElementById("polygon-fill-toggle");
 const statusEl = document.getElementById("status");
 const handles = Array.from(document.querySelectorAll(".handle"));
 const drawColorInput = document.getElementById("draw-color");
+const brushSizeSelect = document.getElementById("brush-size-select");
 
 // Figlet modal
 const modalOverlay = document.getElementById("figlet-modal-overlay");
@@ -827,13 +831,30 @@ function freehandPaint(x,y) {
 
 function paintColor(x,y) {
   const color = drawColorInput.value;
-  const currentColor = getColor(x,y);
-  if (currentColor === color) return;
+  const half = Math.floor(brushSize / 2);
+  let anyChanged = false;
+  
   pushHistory();
-  setColor(x,y,color);
-  invalidateCache();
-  render();
-  scheduleAutosave();
+  for (let dy = -half; dy <= half; dy++) {
+    for (let dx = -half; dx <= half; dx++) {
+      const cx = x + dx;
+      const cy = y + dy;
+      if (cx < 0 || cx >= COLS || cy < 0 || cy >= ROWS) continue;
+      const currentColor = getColor(cx, cy);
+      if (currentColor !== color) {
+        setColor(cx, cy, color);
+        anyChanged = true;
+      }
+    }
+  }
+  if (anyChanged) {
+    invalidateCache();
+    render();
+    scheduleAutosave();
+  } else {
+    // No changes, undo the empty history entry
+    history.pop();
+  }
 }
 
 // ---------- text input ----------
@@ -1655,7 +1676,9 @@ function initEvents() {
       dragStart = { x, y };
     });
   });
-
+  brushSizeSelect.addEventListener("change", (e) => {
+    brushSize = parseInt(e.target.value, 10);
+  });
   hitLayer.addEventListener("pointerdown", (e) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
     e.preventDefault();

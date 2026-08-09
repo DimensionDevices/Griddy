@@ -498,6 +498,22 @@ input[type="color"] { width: 28px; height: 28px; padding: 0; border-radius: 4px;
   padding: 4px 8px;
 }
 
+.brush-size-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.brush-size-group select {
+  padding: 3px 6px;
+  font-size: 11px;
+  background: #2c2f34;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--text);
+  cursor: pointer;
+  min-width: 60px;
+}
+
 /* --- font category tabs (FIGlet modal) --- */
 .font-category-tabs {
   display: flex;

@@ -6,7 +6,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>GRIDDY v1.4</title>
+  <title>GRIDDY v1.5</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -23,11 +23,22 @@
   <button data-tool="figlet">Figlet</button>
   <button data-tool="fill">Fill</button>
   <button data-tool="freehand">Freehand</button>
-  <button data-tool="paint">Paint</button>
   <button data-tool="erase">Erase</button>
   <!-- new image import button -->
   <button id="image-import-btn">📷 Image</button>
-
+  <div style="width:10px">&nbsp;</div>
+  <button data-tool="paint">Paint</button>
+  <div class="brush-size-group">
+    <select id="brush-size-select">
+      <option value="1">1×1</option>
+      <option value="3">3×3</option>
+      <option value="5" selected>5×5</option>
+      <option value="7">7×7</option>
+      <option value="9">9×9</option>
+      <option value="11">11×11</option>
+    </select>
+  </div>
+  <div style="width:10px">&nbsp;</div>
   <label class="inline hidden" id="elbow-toggle-wrap">
     <input type="checkbox" id="elbow-toggle" checked>
     Right-angle
@@ -103,7 +114,7 @@
 </div>
 
 <footer id="app-footer">
-  <span class="footer-title">Griddy v1.4</span>
+  <span class="footer-title">Griddy v1.5</span>
   <span class="footer-sep">·</span>
   <span>&copy; <span id="footer-year"></span> Dimension Devices. All rights reserved.</span>
   <div class="footer-spacer"></div>
