@@ -1,4 +1,4 @@
-# Griddy v1.2 - An open-source ASCII creation tool.
+# Griddy v1.3 - An open-source ASCII creation tool.
 
 [Try Griddy here](https://dimensiondevices.github.io/Griddy/)
 

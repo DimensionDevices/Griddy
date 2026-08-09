@@ -6,7 +6,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>GRIDDY v1.2</title>
+  <title>GRIDDY v1.3</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -25,6 +25,7 @@
   <button data-tool="erase">Erase</button>
   <!-- new image import button -->
   <button id="image-import-btn" class="accent">📷 Image</button>
+  <button id="new-btn">New</button>
 
   <label class="inline hidden" id="elbow-toggle-wrap">
     <input type="checkbox" id="elbow-toggle" checked>
@@ -82,7 +83,7 @@
 </div>
 
 <footer id="app-footer">
-  <span class="footer-title">Griddy v1.2</span>
+  <span class="footer-title">Griddy v1.3</span>
   <span class="footer-sep">·</span>
   <span>&copy; <span id="footer-year"></span> Dimension Devices. All rights reserved.</span>
   <div class="footer-spacer"></div>
@@ -137,7 +138,10 @@
   <div id="figlet-modal">
     <label class="modal-label">Text</label>
     <input id="figlet-text-input" type="text" placeholder="Enter text" maxlength="40" value="FIGlet">
-    <label class="modal-label">Font (click preview to select)</label>
+    <label class="modal-label flex-row-gap8">
+      <span>Font (click preview to select)</span>
+    </label>
+    <div id="font-category-tabs" class="font-category-tabs"></div>
     <div id="font-preview-grid"></div>
     <div id="font-status" class="font-status"></div>
     <pre id="figlet-preview"></pre>
@@ -153,12 +157,19 @@
             <option value="vertical">Vertical ↓</option>
           </select>
         </label>
+        <label class="inline">Style
+          <select id="figlet-gradient-mode">
+            <option value="smooth">Smooth</option>
+            <option value="16color">16-color (retro)</option>
+          </select>
+        </label>
       </div>
       <div class="flex-row-gap10">
         <label class="inline">Start <input type="color" id="figlet-gradient-start" value="#4da3ff"></label>
         <label class="inline">Middle <input type="color" id="figlet-gradient-mid" value="#a385ff"></label>
         <label class="inline">End <input type="color" id="figlet-gradient-end" value="#ff6b9c"></label>
       </div>
+      <div id="figlet-gradient-16-note" class="font-status hidden">16-color mode quantizes your gradient into 16 bold, saturated bands for a chunkier, retro-terminal look.</div>
     </div>
     <div class="modal-actions">
       <button id="figlet-cancel-btn">Cancel</button>
@@ -214,6 +225,40 @@
     <div class="actions">
       <button id="image-cancel-btn">Cancel</button>
       <button id="image-insert-btn" class="accent">Insert at cursor</button>
+    </div>
+  </div>
+</div>
+
+<!-- NEW: canvas size modal (startup + New button) -->
+<div id="size-modal-overlay">
+  <div id="size-modal">
+    <h3 class="modal-plain-title" id="size-modal-title">New Canvas</h3>
+    <p id="size-modal-warning" class="size-modal-warning hidden">Starting a new canvas will discard your current drawing (or you can save it first).</p>
+    <div class="size-mode-row">
+      <label class="size-mode-option">
+        <input type="radio" name="size-mode" id="size-mode-full" value="full" checked>
+        Fit to browser window
+      </label>
+      <label class="size-mode-option">
+        <input type="radio" name="size-mode" id="size-mode-custom" value="custom">
+        Custom size
+      </label>
+    </div>
+    <div id="size-custom-fields" class="size-custom-fields hidden">
+      <div class="slider-group">
+        <label>Columns</label>
+        <input type="range" id="size-cols-slider" min="20" max="300" value="60" />
+        <span id="size-cols-label">60</span>
+      </div>
+      <div class="slider-group">
+        <label>Rows</label>
+        <input type="range" id="size-rows-slider" min="15" max="150" value="35" />
+        <span id="size-rows-label">35</span>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button id="size-cancel-btn" class="hidden">Cancel</button>
+      <button id="size-confirm-btn" class="accent">Create</button>
     </div>
   </div>
 </div>

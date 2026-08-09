@@ -38,6 +38,7 @@ const copySelBtn = document.getElementById("copy-sel-btn");
 const deleteSelBtn = document.getElementById("delete-sel-btn");
 const pasteBtn = document.getElementById("paste-btn");
 const clearBtn = document.getElementById("clear-btn");
+const newBtn = document.getElementById("new-btn");
 const exportBtn = document.getElementById("export-btn");
 const copyHtmlBtn = document.getElementById("copy-html-btn");
 const copyTextBtn = document.getElementById("copy-text-btn");
@@ -68,10 +69,13 @@ const figletInsertBtn = document.getElementById("figlet-insert-btn");
 const figletGradientToggle = document.getElementById("figlet-gradient-toggle");
 const figletGradientOptions = document.getElementById("figlet-gradient-options");
 const figletGradientDirection = document.getElementById("figlet-gradient-direction");
+const figletGradientMode = document.getElementById("figlet-gradient-mode");
 const figletGradientStart = document.getElementById("figlet-gradient-start");
 const figletGradientMid = document.getElementById("figlet-gradient-mid");
 const figletGradientEnd = document.getElementById("figlet-gradient-end");
+const figletGradient16Note = document.getElementById("figlet-gradient-16-note");
 const fontStatus = document.getElementById("font-status");
+const fontCategoryTabs = document.getElementById("font-category-tabs");
 
 // NEW image import elements
 const imageImportBtn = document.getElementById("image-import-btn");
@@ -94,6 +98,19 @@ const imageAsciiPreview = document.getElementById("image-ascii-preview");
 const imageCancelBtn = document.getElementById("image-cancel-btn");
 const imageInsertBtn = document.getElementById("image-insert-btn");
 
+// NEW canvas size modal elements
+const sizeModalOverlay = document.getElementById("size-modal-overlay");
+const sizeModalWarning = document.getElementById("size-modal-warning");
+const sizeModeFull = document.getElementById("size-mode-full");
+const sizeModeCustom = document.getElementById("size-mode-custom");
+const sizeCustomFields = document.getElementById("size-custom-fields");
+const sizeColsSlider = document.getElementById("size-cols-slider");
+const sizeRowsSlider = document.getElementById("size-rows-slider");
+const sizeColsLabel = document.getElementById("size-cols-label");
+const sizeRowsLabel = document.getElementById("size-rows-label");
+const sizeCancelBtn = document.getElementById("size-cancel-btn");
+const sizeConfirmBtn = document.getElementById("size-confirm-btn");
+
 // state
 let shapes = [];
 let colorMap = {};
@@ -111,7 +128,9 @@ let textState = null;
 let altHeld = false;
 let clipboard = null;
 let selectedFontName = null;
+let selectedFontCategory = "All";
 let COLS = 60, ROWS = 35;
+let fixedCanvasSize = false; // true once user picks a custom size, disables auto-resize-to-window
 
 // Image import state
 let importedImageData = null;
@@ -177,6 +196,94 @@ function gradientColorAt(t, startHex, midHex, endHex) {
     g: a.g + (b.g - a.g) * localT,
     b: a.b + (b.b - a.b) * localT
   });
+}
+
+// ---- 16-color ("retro") gradient ----
+function rgbToHsl({ r, g, b }) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h, s, l = (max + min) / 2;
+  if (max === min) { h = s = 0; }
+  else {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+      case g: h = (b - r) / d + 2; break;
+      case b: h = (r - g) / d + 4; break;
+    }
+    h /= 6;
+  }
+  return { h, s, l };
+}
+function hslToRgb({ h, s, l }) {
+  let r, g, b;
+  if (s === 0) { r = g = b = l; }
+  else {
+    const hue2rgb = (p, q, t) => {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1 / 6) return p + (q - p) * 6 * t;
+      if (t < 1 / 2) return q;
+      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+      return p;
+    };
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1 / 3);
+    g = hue2rgb(p, q, h);
+    b = hue2rgb(p, q, h - 1 / 3);
+  }
+  return { r: r * 255, g: g * 255, b: b * 255 };
+}
+// A plain nearest-neighbor snap against the 16 classic ANSI colors, or a
+// naive per-channel push toward 0/255, both break down when the smooth
+// gradient passes through a desaturated midpoint (e.g. red -> yellow ->
+// blue dips through gray at the crossover) - the result reads as a stray
+// white/gray band instead of a color. Working in HSL avoids that: hue is
+// preserved exactly from the source gradient, and only saturation/lightness
+// are pushed toward bold, readable "retro terminal" values.
+function buildRetro16Palette(startHex, midHex, endHex) {
+  const STEPS = 16;
+  const palette = [];
+  for (let i = 0; i < STEPS; i++) {
+    const t = i / (STEPS - 1);
+    const hsl = rgbToHsl(hexToRgb(gradientColorAt(t, startHex, midHex, endHex)));
+    hsl.s = Math.min(1, hsl.s * 0.3 + 0.7);       // push toward fully saturated
+    hsl.l = 0.32 + Math.min(1, hsl.l) * 0.36;     // clamp lightness to a bold, legible band
+    palette.push(rgbToHex(hslToRgb(hsl)));
+  }
+  return palette;
+}
+// t in [0,1] indexes directly into the 16-step palette (no distance search
+// needed since the palette was built in gradient order already).
+function gradientColorAt16(t, startHex, midHex, endHex, palette) {
+  palette = palette || buildRetro16Palette(startHex, midHex, endHex);
+  const idx = Math.max(0, Math.min(palette.length - 1, Math.round(t * (palette.length - 1))));
+  return palette[idx];
+}
+
+// 4x4 Bayer ordered-dither matrix (values 0-15), used to scatter pixels
+// between two adjacent palette bands near a color-stop boundary instead of
+// a hard cut - gives a textured, dithered transition typical of retro/
+// limited-palette graphics rather than flat stripes.
+const BAYER_4X4 = [
+  [ 0,  8,  2, 10],
+  [12,  4, 14,  6],
+  [ 3, 11,  1,  9],
+  [15,  7, 13,  5]
+];
+function gradientColorAt16Dithered(t, startHex, midHex, endHex, col, row, palette) {
+  palette = palette || buildRetro16Palette(startHex, midHex, endHex);
+  const n = palette.length;
+  // Position within the palette as a continuous index, so we can dither
+  // between the two nearest bands based on the fractional part.
+  const pos = Math.max(0, Math.min(n - 1, t * (n - 1)));
+  const lo = Math.floor(pos);
+  const hi = Math.min(n - 1, lo + 1);
+  const frac = pos - lo;
+  const threshold = (BAYER_4X4[row % 4][col % 4] + 0.5) / 16;
+  return frac > threshold ? palette[hi] : palette[lo];
 }
 
 function setColor(x,y,hex){
@@ -627,6 +734,27 @@ function renderFiglet(text, font) {
 
 const COMMON_FONTS=["3-d","3x5","5lineoblique","acrobatic","alligator","alligator2","alphabet","avatar","banner","banner3","banner3-D","banner4","barbwire","basic","bell","big","bigchief","binary","block","bubble","bulbhead","calgphy2","caligraphy","catwalk","chunky","coinstak","colossal","computer","contessa","contrast","cosmic","cosmike","cricket","cursive","cyberlarge","cybermedium","cybersmall","diamond","digital","doh","doom","dotmatrix","drpepper","eftichess","eftifont","eftipiti","eftirobot","eftitalic","eftiwall","eftiwater","epic","fender","fourtops","fuzzy","goofy","gothic","graffiti","hollywood","invita","isometric1","isometric2","isometric3","isometric4","italic","ivrit","jazmine","jerusalem","katakana","kban","larry3d","lcd","lean","letters","linux","lockergnome","madrid","marquee","maxfour","mike","mini","mirror","mnemonic","morse","moscow","nancyj","nancyj-fancy","nancyj-underlined","nipples","ntgreek","o8","ogre","pawp","peaks","pebbles","pepper","poison","puffy","pyramid","relief","relief2","rev","roman","rot13","rounded","rowancap","rozzo","runic","runyc","sblood","script","serifcap","shadow","short","slant","slide","slscript","small","smisome1","smkeyboard","smscript","smshadow","smslant","smtengwar","speed","stampatello","standard","starwars","stellar","stop","straight","tanja","tengwar","term","thick","thin","threepoint","ticks","ticksslant","tinker-toy","tombstone","trek","tsalagi","twopoint","univers","usaflag","wavy","weird"];
 
+// Category groupings for the 147-font list, so users can filter instead of
+// scrolling through everything. Each font appears in exactly one category;
+// fonts not explicitly listed fall back to "Other".
+const FONT_CATEGORIES = {
+  "Classic / Block": ["standard","big","block","banner","banner3","banner3-D","banner4","bulbhead","doh","colossal","larry3d","univers","contrast","straight","bigchief","fender","chunky"],
+  "Small / Compact": ["small","mini","3x5","short","term","thin","thick","straight","o8","binary","twopoint","threepoint","ticks","ticksslant"],
+  "3D / Isometric": ["3-d","isometric1","isometric2","isometric3","isometric4","smisome1","larry3d","cosmike","cyberlarge","cybermedium","cybersmall","relief","relief2","graffiti"],
+  "Shadow / Outline": ["shadow","smshadow","rev","doom","epic","invita","nancyj","nancyj-fancy","nancyj-underlined","rounded","rozzo","contessa"],
+  "Script / Cursive": ["script","smscript","slscript","cursive","caligraphy","stampatello","mirror","slant","smslant","italic","eftitalic"],
+  "Bubble / Puffy": ["bubble","puffy","fuzzy","goofy","pebbles","nipples","weird","wavy","catwalk"],
+  "Sci-Fi / Digital": ["digital","lcd","dotmatrix","cosmic","starwars","trek","speed","drpepper","stellar","morse","binary"],
+  "Retro / Novelty": ["hollywood","marquee","banner","barbwire","poison","sblood","tombstone","runic","tsalagi","katakana","ivrit","ntgreek","jerusalem","jazmine","madrid","moscow"],
+  "Handwriting / Tech": ["eftichess","eftifont","eftipiti","eftirobot","eftiwall","eftiwater","letters","alphabet","mnemonic","kban","lockergnome","lean","mike","avatar","pawp","peaks","gothic","tanja","tengwar","smtengwar","smkeyboard","acrobatic","alligator","alligator2","bell","calgphy2","coinstak","computer","cricket","diamond","fourtops","maxfour","ogre","pyramid","roman","rot13","rowancap","runyc","serifcap","stop","tinker-toy","usaflag","5lineoblique"]
+};
+// Reverse-lookup map: font name -> category name (built once).
+const FONT_TO_CATEGORY = {};
+Object.entries(FONT_CATEGORIES).forEach(([cat, names]) => {
+  names.forEach(n => { FONT_TO_CATEGORY[n] = cat; });
+});
+function categoryOf(fontName) { return FONT_TO_CATEGORY[fontName] || "Other"; }
+
 // Cache of which fonts actually exist on the server, so we only pay the
 // network cost of checking 147 .flf files once per page load rather than
 // on every keystroke in the figlet text input.
@@ -724,39 +852,100 @@ async function buildFontPreviewGrid() {
   await renderFontPreviewItems(available, text);
 }
 
+// Builds the row of category filter tabs above the font grid. Selecting a
+// tab re-renders the grid filtered to that category (or "All").
+function buildFontCategoryTabs(available) {
+  const tabsEl = fontCategoryTabs;
+  tabsEl.innerHTML = '';
+
+  // Only show categories that actually have at least one available font.
+  const presentCats = new Set(available.map(categoryOf));
+  const orderedCats = ["All", ...Object.keys(FONT_CATEGORIES).filter(c => presentCats.has(c)), ...(presentCats.has("Other") ? ["Other"] : [])];
+
+  orderedCats.forEach(cat => {
+    const tab = document.createElement('button');
+    tab.type = 'button';
+    tab.className = 'font-category-tab';
+    const count = cat === "All" ? available.length : available.filter(n => categoryOf(n) === cat).length;
+    tab.textContent = `${cat} (${count})`;
+    if (cat === selectedFontCategory) tab.classList.add('active');
+    tab.addEventListener('click', () => {
+      selectedFontCategory = cat;
+      renderFontPreviewItems(available, figletTextInput.value || ' ');
+    });
+    tabsEl.appendChild(tab);
+  });
+}
+
 async function renderFontPreviewItems(available, text) {
   const grid = fontPreviewGrid;
   grid.innerHTML = '';
 
-  for (const name of available) {
-    const item = document.createElement('div');
-    item.className = 'font-preview-item';
-    item.dataset.font = name;
-    try {
-      const font = await loadFont(name);
-      const rendered = renderFiglet(text, font);
-      const lines = rendered.split('\n');
-      const previewText = lines.slice(0, 10).join('\n') || ' ';
-      item.textContent = previewText;
-      const nameSpan = document.createElement('span');
-      nameSpan.className = 'font-name';
-      nameSpan.textContent = name;
-      item.appendChild(nameSpan);
-      if (name === selectedFontName) item.classList.add('selected');
-      item.addEventListener('click', () => {
-        grid.querySelectorAll('.font-preview-item').forEach(el => el.classList.remove('selected'));
-        item.classList.add('selected');
-        selectedFontName = name;
-        updateFigletPreview();
-      });
-      grid.appendChild(item);
-    } catch (err) {}
+  buildFontCategoryTabs(available);
+  fontCategoryTabs.querySelectorAll('.font-category-tab').forEach(tab => {
+    tab.classList.toggle('active', tab.textContent.startsWith(selectedFontCategory + ' ('));
+  });
+
+  const filtered = selectedFontCategory === "All"
+    ? available
+    : available.filter(n => categoryOf(n) === selectedFontCategory);
+
+  // Group by category so headings appear even in "All" view, making the
+  // 147-font list easier to scan while scrolling.
+  const groups = {};
+  filtered.forEach(name => {
+    const cat = categoryOf(name);
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(name);
+  });
+  const groupOrder = selectedFontCategory === "All"
+    ? [...Object.keys(FONT_CATEGORIES), "Other"].filter(c => groups[c])
+    : [selectedFontCategory];
+
+  for (const cat of groupOrder) {
+    const names = groups[cat];
+    if (!names || names.length === 0) continue;
+
+    if (selectedFontCategory === "All") {
+      const heading = document.createElement('div');
+      heading.className = 'font-category-heading';
+      heading.textContent = `${cat} · ${names.length}`;
+      grid.appendChild(heading);
+    }
+
+    for (const name of names) {
+      const item = document.createElement('div');
+      item.className = 'font-preview-item';
+      item.dataset.font = name;
+      try {
+        const font = await loadFont(name);
+        const rendered = renderFiglet(text, font);
+        const lines = rendered.split('\n');
+        const previewText = lines.slice(0, 10).join('\n') || ' ';
+        item.textContent = previewText;
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'font-name';
+        nameSpan.textContent = name;
+        item.appendChild(nameSpan);
+        if (name === selectedFontName) item.classList.add('selected');
+        item.addEventListener('click', () => {
+          grid.querySelectorAll('.font-preview-item').forEach(el => el.classList.remove('selected'));
+          item.classList.add('selected');
+          selectedFontName = name;
+          updateFigletPreview();
+        });
+        grid.appendChild(item);
+      } catch (err) {}
+    }
   }
-  if (!selectedFontName && grid.children.length > 0) {
-    const first = grid.children[0];
-    first.classList.add('selected');
-    selectedFontName = first.dataset.font;
-    updateFigletPreview();
+
+  if (!selectedFontName) {
+    const first = grid.querySelector('.font-preview-item');
+    if (first) {
+      first.classList.add('selected');
+      selectedFontName = first.dataset.font;
+      updateFigletPreview();
+    }
   }
 }
 
@@ -784,7 +973,9 @@ function openFigletModal() {
   modalOverlay.style.display = "flex";
   figletTextInput.value = "FIGlet";
   selectedFontName = null;
+  selectedFontCategory = "All";
   figletGradientOptions.style.display = figletGradientToggle.checked ? "flex" : "none";
+  figletGradient16Note.classList.toggle("hidden", figletGradientMode.value !== "16color");
   buildFontPreviewGrid();
   figletTextInput.focus();
 }
@@ -815,17 +1006,25 @@ async function insertFiglet() {
     const useGradient = figletGradientToggle.checked;
     if (useGradient) {
       const dir = figletGradientDirection.value; // "horizontal" | "vertical"
+      const mode = figletGradientMode.value; // "smooth" | "16color"
       const startHex = figletGradientStart.value;
       const midHex = figletGradientMid.value;
       const endHex = figletGradientEnd.value;
       const denomW = Math.max(1, w - 1);
       const denomH = Math.max(1, h - 1);
+      // Build the 16-color palette once per insert rather than per cell.
+      const palette16 = mode === "16color" ? buildRetro16Palette(startHex, midHex, endHex) : null;
       for (let r=0; r<lines.length; r++) {
         const row = lines[r];
         for (let c=0; c<row.length; c++) {
           if (row[c] !== " ") {
             const t = dir === "vertical" ? (r / denomH) : (c / denomW);
-            setColor(x+c, y+r, gradientColorAt(t, startHex, midHex, endHex));
+            // Dither using absolute canvas coordinates (x+c, y+r) so the
+            // Bayer pattern is stable and consistent across the whole shape.
+            const color = mode === "16color"
+              ? gradientColorAt16Dithered(t, startHex, midHex, endHex, x+c, y+r, palette16)
+              : gradientColorAt(t, startHex, midHex, endHex);
+            setColor(x+c, y+r, color);
           }
         }
       }
@@ -848,11 +1047,63 @@ async function insertFiglet() {
   }
 }
 
+// ---------- canvas size modal (New / startup) ----------
+function updateSizeModalFieldsVisibility() {
+  sizeCustomFields.classList.toggle("hidden", !sizeModeCustom.checked);
+}
+
+// isNewAction: true when opened via the "New" button (shows a discard
+// warning + Cancel button); false for the initial startup prompt (no
+// existing drawing to discard, so no warning/Cancel).
+function openSizeModal(isNewAction) {
+  sizeModalWarning.classList.toggle("hidden", !isNewAction);
+  sizeCancelBtn.classList.toggle("hidden", !isNewAction);
+  sizeModalOverlay.dataset.isNewAction = isNewAction ? "1" : "0";
+
+  // Pre-fill custom fields with the current canvas size for convenience.
+  sizeColsSlider.value = COLS;
+  sizeRowsSlider.value = ROWS;
+  sizeColsLabel.textContent = COLS;
+  sizeRowsLabel.textContent = ROWS;
+  sizeModeFull.checked = true;
+  updateSizeModalFieldsVisibility();
+
+  sizeModalOverlay.style.display = "flex";
+}
+function closeSizeModal() { sizeModalOverlay.style.display = "none"; }
+
+function confirmSizeModal() {
+  const isNewAction = sizeModalOverlay.dataset.isNewAction === "1";
+
+  if (isNewAction) {
+    pushHistory();
+    shapes = [];
+    colorMap = {};
+    selectedShapeIdx = null;
+  }
+
+  if (sizeModeCustom.checked) {
+    COLS = parseInt(sizeColsSlider.value, 10);
+    ROWS = parseInt(sizeRowsSlider.value, 10);
+    fixedCanvasSize = true;
+  } else {
+    const dims = computeDims();
+    COLS = dims.cols; ROWS = dims.rows;
+    fixedCanvasSize = false;
+  }
+
+  setInnerSize();
+  invalidateCache();
+  render();
+  if (isNewAction) scheduleAutosave();
+  closeSizeModal();
+}
+
 // ---------- save/load ----------
 const STORAGE_KEY = "ascii-flow-color-v1";
 function saveToStorage(silent) {
   try {
-    const payload = { shapes, colorMap, cols: COLS, rows: ROWS, savedAt: Date.now() };
+    const payload = { shapes, colorMap, cols: COLS, rows: ROWS, fixedCanvasSize, savedAt: Date.now() };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     if (!silent) flashStatus("Saved");
   } catch(e) { if(!silent) flashStatus("Save failed"); }
@@ -866,6 +1117,12 @@ function loadFromStorage(silent) {
     shapes = payload.shapes || [];
     colorMap = payload.colorMap || {};
     selectedShapeIdx = null;
+    if (payload.fixedCanvasSize && payload.cols && payload.rows) {
+      fixedCanvasSize = true;
+      COLS = payload.cols;
+      ROWS = payload.rows;
+      setInnerSize();
+    }
     invalidateCache();
     render();
     if(!silent) flashStatus("Loaded");
@@ -1587,6 +1844,9 @@ function initEvents() {
   figletGradientToggle.addEventListener("change", () => {
     figletGradientOptions.style.display = figletGradientToggle.checked ? "flex" : "none";
   });
+  figletGradientMode.addEventListener("change", () => {
+    figletGradient16Note.classList.toggle("hidden", figletGradientMode.value !== "16color");
+  });
   figletTextInput.addEventListener("input", () => { buildFontPreviewGrid(); });
   figletCancelBtn.addEventListener("click", closeFigletModal);
   figletInsertBtn.addEventListener("click", insertFiglet);
@@ -1615,6 +1875,7 @@ function initEvents() {
 
   let resizeTimer = null;
   window.addEventListener("resize", () => {
+    if (fixedCanvasSize) return; // custom size chosen - don't auto-resize to window
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
       const dims = computeDims();
@@ -1625,6 +1886,16 @@ function initEvents() {
       render();
     }, 150);
   });
+
+  // ---- NEW: canvas size modal (startup + "New" button) ----
+  newBtn.addEventListener("click", () => openSizeModal(true));
+  sizeModeFull.addEventListener("change", updateSizeModalFieldsVisibility);
+  sizeModeCustom.addEventListener("change", updateSizeModalFieldsVisibility);
+  sizeColsSlider.addEventListener("input", () => { sizeColsLabel.textContent = sizeColsSlider.value; });
+  sizeRowsSlider.addEventListener("input", () => { sizeRowsLabel.textContent = sizeRowsSlider.value; });
+  sizeCancelBtn.addEventListener("click", closeSizeModal);
+  sizeConfirmBtn.addEventListener("click", confirmSizeModal);
+  sizeModalOverlay.addEventListener("click", (e) => { if (e.target === sizeModalOverlay && !sizeCancelBtn.classList.contains("hidden")) closeSizeModal(); });
 }
 
 // ---------- init ----------
@@ -1637,6 +1908,13 @@ document.querySelectorAll("#app-footer a").forEach(a => {
 const dims = computeDims();
 COLS = dims.cols; ROWS = dims.rows;
 setInnerSize();
-loadFromStorage(true);
+const hadSavedWork = loadFromStorage(true);
 initEvents();
 render();
+
+// Prompt for canvas size on a fresh start (nothing to restore). If there's
+// existing autosaved work, skip the prompt so returning users land straight
+// on their drawing - the canvas already defaults to fitting the window.
+if (!hadSavedWork) {
+  openSizeModal(false);
+}
