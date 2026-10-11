@@ -81,10 +81,6 @@ Use the toolbar buttons to:
 - **Copy as HTML** - copies a colored `<pre>` block suitable for pasting into rich-text editors or web pages
 - **Copy plain text** - copies the plain-text grid without any HTML wrapper
 
-## Tech
-
-Everything - markup, styles, and logic - lives in a single `index.html` file using vanilla JavaScript (no framework, no bundler). Rendering is done with two stacked `<pre>` layers (characters and colors) over a plain-text character grid, with an invisible hit-testing layer on top to handle mouse interaction.
-
 ## MIT License
 
 Copyright (c) 2026 DimensionDevices
